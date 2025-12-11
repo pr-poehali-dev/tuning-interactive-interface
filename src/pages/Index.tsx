@@ -1,52 +1,171 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import Icon from '@/components/ui/icon';
+import ClientDialog from '@/components/dialogs/ClientDialog';
+import CarDialog from '@/components/dialogs/CarDialog';
+import ServiceDialog from '@/components/dialogs/ServiceDialog';
+import OrderDialog from '@/components/dialogs/OrderDialog';
 
-const mockOrders = [
-  { id: '001', client: 'Иванов А.П.', car: 'BMW M3', status: 'В работе', total: 125000, date: '10.12.2024' },
-  { id: '002', client: 'Петров С.М.', car: 'Mercedes C63', status: 'Завершен', total: 89000, date: '08.12.2024' },
-  { id: '003', client: 'Сидорова М.И.', car: 'Audi RS6', status: 'Ожидание', total: 156000, date: '11.12.2024' },
-  { id: '004', client: 'Козлов В.Н.', car: 'Porsche 911', status: 'В работе', total: 210000, date: '09.12.2024' },
-];
+const API_URL = 'https://functions.poehali.dev/b25b1563-bddf-443b-922f-0d5bf04194c0';
 
-const mockCars = [
-  { id: 1, brand: 'BMW', model: 'M3', year: 2022, owner: 'Иванов А.П.', orders: 3 },
-  { id: 2, brand: 'Mercedes', model: 'C63 AMG', year: 2021, owner: 'Петров С.М.', orders: 2 },
-  { id: 3, brand: 'Audi', model: 'RS6', year: 2023, owner: 'Сидорова М.И.', orders: 1 },
-  { id: 4, brand: 'Porsche', model: '911 Turbo', year: 2022, owner: 'Козлов В.Н.', orders: 4 },
-];
+interface Client {
+  id: number;
+  name: string;
+  phone: string;
+  email?: string;
+  orders: number;
+  total: number;
+}
 
-const mockServices = [
-  { id: 1, name: 'Чип-тюнинг Stage 1', price: 35000, duration: '2-3 дня', popular: true },
-  { id: 2, name: 'Установка выхлопной системы', price: 85000, duration: '1 день', popular: true },
-  { id: 3, name: 'Тонировка стекол', price: 12000, duration: '3-4 часа', popular: false },
-  { id: 4, name: 'Полировка кузова', price: 18000, duration: '1 день', popular: false },
-];
+interface Car {
+  id: number;
+  brand: string;
+  model: string;
+  year: number;
+  license_plate?: string;
+  owner?: string;
+  orders: number;
+  client_id?: number;
+}
 
-const mockClients = [
-  { id: 1, name: 'Иванов Александр Петрович', phone: '+7 (915) 234-56-78', orders: 3, total: 245000 },
-  { id: 2, name: 'Петров Сергей Михайлович', phone: '+7 (916) 345-67-89', orders: 2, total: 156000 },
-  { id: 3, name: 'Сидорова Марина Игоревна', phone: '+7 (917) 456-78-90', orders: 1, total: 156000 },
-  { id: 4, name: 'Козлов Владимир Николаевич', phone: '+7 (918) 567-89-01', orders: 4, total: 389000 },
-];
+interface Service {
+  id: number;
+  name: string;
+  description?: string;
+  price: number;
+  duration?: string;
+  popular: boolean;
+}
+
+interface Order {
+  id: string;
+  client: string;
+  car: string;
+  status: string;
+  total: number;
+  date: string;
+  notes?: string;
+  client_id?: number;
+  car_id?: number;
+}
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
+  
+  const [clients, setClients] = useState<Client[]>([]);
+  const [cars, setCars] = useState<Car[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  
+  const [isClientDialogOpen, setIsClientDialogOpen] = useState(false);
+  const [isCarDialogOpen, setIsCarDialogOpen] = useState(false);
+  const [isServiceDialogOpen, setIsServiceDialogOpen] = useState(false);
+  const [isOrderDialogOpen, setIsOrderDialogOpen] = useState(false);
+  
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [editingCar, setEditingCar] = useState<Car | null>(null);
+  const [editingService, setEditingService] = useState<Service | null>(null);
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [clientsRes, carsRes, servicesRes, ordersRes] = await Promise.all([
+        fetch(`${API_URL}?entity=clients`),
+        fetch(`${API_URL}?entity=cars`),
+        fetch(`${API_URL}?entity=services`),
+        fetch(`${API_URL}?entity=orders`)
+      ]);
+      
+      setClients(await clientsRes.json());
+      setCars(await carsRes.json());
+      setServices(await servicesRes.json());
+      setOrders(await ordersRes.json());
+    } catch (error) {
+      console.error('Ошибка загрузки данных:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveClient = async (client: any) => {
+    try {
+      const method = client.id ? 'PUT' : 'POST';
+      await fetch(API_URL, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entity: 'clients', ...client })
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Ошибка сохранения клиента:', error);
+    }
+  };
+
+  const handleSaveCar = async (car: any) => {
+    try {
+      const method = car.id ? 'PUT' : 'POST';
+      await fetch(API_URL, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entity: 'cars', ...car })
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Ошибка сохранения автомобиля:', error);
+    }
+  };
+
+  const handleSaveService = async (service: any) => {
+    try {
+      const method = service.id ? 'PUT' : 'POST';
+      await fetch(API_URL, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entity: 'services', ...service })
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Ошибка сохранения услуги:', error);
+    }
+  };
+
+  const handleSaveOrder = async (order: any) => {
+    try {
+      const method = order.id ? 'PUT' : 'POST';
+      await fetch(API_URL, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entity: 'orders', ...order })
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Ошибка сохранения заказа:', error);
+    }
+  };
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; color: string }> = {
-      'В работе': { variant: 'default', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-      'Завершен': { variant: 'secondary', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
-      'Ожидание': { variant: 'outline', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
+    const variants: Record<string, string> = {
+      'В работе': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+      'Завершен': 'bg-green-500/20 text-green-400 border-green-500/30',
+      'Ожидание': 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
     };
-    return <Badge className={`${variants[status]?.color} border`}>{status}</Badge>;
+    return <Badge className={`${variants[status]} border`}>{status}</Badge>;
   };
+
+  const activeOrders = orders.filter(o => o.status === 'В работе').length;
+  const totalRevenue = orders.reduce((sum, o) => sum + o.total, 0);
 
   return (
     <div className="min-h-screen bg-background">
@@ -57,7 +176,7 @@ const Index = () => {
               <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
                 <Icon name="Wrench" size={20} className="text-primary-foreground" />
               </div>
-              <h1 className="text-xl font-bold text-sidebar-foreground">TuningPro</h1>
+              <h1 className="text-xl font-bold text-sidebar-foreground">TunVik</h1>
             </div>
           </div>
 
@@ -132,7 +251,21 @@ const Index = () => {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-64"
                   />
-                  <Button>
+                  <Button onClick={() => {
+                    if (activeTab === 'clients') {
+                      setEditingClient(null);
+                      setIsClientDialogOpen(true);
+                    } else if (activeTab === 'cars') {
+                      setEditingCar(null);
+                      setIsCarDialogOpen(true);
+                    } else if (activeTab === 'services') {
+                      setEditingService(null);
+                      setIsServiceDialogOpen(true);
+                    } else if (activeTab === 'orders') {
+                      setEditingOrder(null);
+                      setIsOrderDialogOpen(true);
+                    }
+                  }}>
                     <Icon name="Plus" size={18} className="mr-2" />
                     Добавить
                   </Button>
@@ -140,251 +273,279 @@ const Index = () => {
               )}
             </div>
 
-            {activeTab === 'dashboard' && (
-              <div className="space-y-6 animate-fade-in">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <Card className="border-border bg-card hover:bg-card/80 transition-colors">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Активных заказов</CardTitle>
-                        <Icon name="ClipboardList" size={20} className="text-primary" />
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold text-foreground">8</div>
-                      <p className="text-xs text-muted-foreground mt-1">+2 за неделю</p>
+            {loading ? (
+              <div className="flex items-center justify-center h-64">
+                <p className="text-muted-foreground">Загрузка...</p>
+              </div>
+            ) : (
+              <>
+                {activeTab === 'dashboard' && (
+                  <div className="space-y-6 animate-fade-in">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <Card className="border-border bg-card hover:bg-card/80 transition-colors">
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-sm font-medium text-muted-foreground">Активных заказов</CardTitle>
+                            <Icon name="ClipboardList" size={20} className="text-primary" />
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold text-foreground">{activeOrders}</div>
+                          <p className="text-xs text-muted-foreground mt-1">в работе</p>
+                        </CardContent>
+                      </Card>
+
+                      <Card className="border-border bg-card hover:bg-card/80 transition-colors">
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-sm font-medium text-muted-foreground">Выручка (всего)</CardTitle>
+                            <Icon name="TrendingUp" size={20} className="text-primary" />
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold text-foreground">{(totalRevenue / 1000000).toFixed(1)}M ₽</div>
+                          <p className="text-xs text-muted-foreground mt-1">все заказы</p>
+                        </CardContent>
+                      </Card>
+
+                      <Card className="border-border bg-card hover:bg-card/80 transition-colors">
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-sm font-medium text-muted-foreground">Клиентов</CardTitle>
+                            <Icon name="Users" size={20} className="text-primary" />
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold text-foreground">{clients.length}</div>
+                          <p className="text-xs text-muted-foreground mt-1">в базе данных</p>
+                        </CardContent>
+                      </Card>
+
+                      <Card className="border-border bg-card hover:bg-card/80 transition-colors">
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-sm font-medium text-muted-foreground">Автомобилей</CardTitle>
+                            <Icon name="Car" size={20} className="text-primary" />
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold text-foreground">{cars.length}</div>
+                          <p className="text-xs text-muted-foreground mt-1">в базе данных</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <Card className="border-border bg-card">
+                        <CardHeader>
+                          <CardTitle className="text-lg">Последние заказы</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-4">
+                            {orders.slice(0, 5).map((order) => (
+                              <div key={order.id} className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors">
+                                <div>
+                                  <p className="font-medium text-foreground">{order.client}</p>
+                                  <p className="text-sm text-muted-foreground">{order.car}</p>
+                                </div>
+                                <div className="text-right">
+                                  {getStatusBadge(order.status)}
+                                  <p className="text-sm text-muted-foreground mt-1">{order.total.toLocaleString()} ₽</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card className="border-border bg-card">
+                        <CardHeader>
+                          <CardTitle className="text-lg">Популярные услуги</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-4">
+                            {services.filter(s => s.popular).slice(0, 5).map((service) => (
+                              <div key={service.id} className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors">
+                                <div>
+                                  <p className="font-medium text-foreground">{service.name}</p>
+                                  <p className="text-sm text-muted-foreground">{service.duration}</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="font-bold text-primary">{service.price.toLocaleString()} ₽</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'orders' && (
+                  <Card className="border-border bg-card animate-fade-in">
+                    <CardContent className="p-6">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent border-border">
+                            <TableHead className="text-muted-foreground">№</TableHead>
+                            <TableHead className="text-muted-foreground">Клиент</TableHead>
+                            <TableHead className="text-muted-foreground">Автомобиль</TableHead>
+                            <TableHead className="text-muted-foreground">Статус</TableHead>
+                            <TableHead className="text-muted-foreground">Сумма</TableHead>
+                            <TableHead className="text-muted-foreground">Дата</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {orders.map((order) => (
+                            <TableRow key={order.id} className="border-border hover:bg-secondary/50 transition-colors">
+                              <TableCell className="font-medium text-foreground">#{order.id}</TableCell>
+                              <TableCell className="text-foreground">{order.client}</TableCell>
+                              <TableCell className="text-muted-foreground">{order.car}</TableCell>
+                              <TableCell>{getStatusBadge(order.status)}</TableCell>
+                              <TableCell className="font-semibold text-foreground">{order.total.toLocaleString()} ₽</TableCell>
+                              <TableCell className="text-muted-foreground">{order.date}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </CardContent>
                   </Card>
+                )}
 
-                  <Card className="border-border bg-card hover:bg-card/80 transition-colors">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Выручка (месяц)</CardTitle>
-                        <Icon name="TrendingUp" size={20} className="text-primary" />
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold text-foreground">2.4M ₽</div>
-                      <p className="text-xs text-muted-foreground mt-1">+12% к пред. месяцу</p>
+                {activeTab === 'cars' && (
+                  <Card className="border-border bg-card animate-fade-in">
+                    <CardContent className="p-6">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent border-border">
+                            <TableHead className="text-muted-foreground">Марка</TableHead>
+                            <TableHead className="text-muted-foreground">Модель</TableHead>
+                            <TableHead className="text-muted-foreground">Год</TableHead>
+                            <TableHead className="text-muted-foreground">Номер</TableHead>
+                            <TableHead className="text-muted-foreground">Владелец</TableHead>
+                            <TableHead className="text-muted-foreground">Заказов</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {cars.map((car) => (
+                            <TableRow key={car.id} className="border-border hover:bg-secondary/50 transition-colors">
+                              <TableCell className="font-medium text-foreground">{car.brand}</TableCell>
+                              <TableCell className="text-foreground">{car.model}</TableCell>
+                              <TableCell className="text-muted-foreground">{car.year}</TableCell>
+                              <TableCell className="text-muted-foreground">{car.license_plate || '—'}</TableCell>
+                              <TableCell className="text-muted-foreground">{car.owner}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="border-primary/30 text-primary">{car.orders}</Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </CardContent>
                   </Card>
+                )}
 
-                  <Card className="border-border bg-card hover:bg-card/80 transition-colors">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Клиентов</CardTitle>
-                        <Icon name="Users" size={20} className="text-primary" />
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold text-foreground">124</div>
-                      <p className="text-xs text-muted-foreground mt-1">+8 новых</p>
+                {activeTab === 'clients' && (
+                  <Card className="border-border bg-card animate-fade-in">
+                    <CardContent className="p-6">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent border-border">
+                            <TableHead className="text-muted-foreground">ФИО</TableHead>
+                            <TableHead className="text-muted-foreground">Телефон</TableHead>
+                            <TableHead className="text-muted-foreground">Email</TableHead>
+                            <TableHead className="text-muted-foreground">Заказов</TableHead>
+                            <TableHead className="text-muted-foreground">Всего потрачено</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {clients.map((client) => (
+                            <TableRow key={client.id} className="border-border hover:bg-secondary/50 transition-colors">
+                              <TableCell className="font-medium text-foreground">{client.name}</TableCell>
+                              <TableCell className="text-muted-foreground">{client.phone}</TableCell>
+                              <TableCell className="text-muted-foreground">{client.email || '—'}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="border-primary/30 text-primary">{client.orders}</Badge>
+                              </TableCell>
+                              <TableCell className="font-semibold text-foreground">{client.total.toLocaleString()} ₽</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </CardContent>
                   </Card>
+                )}
 
-                  <Card className="border-border bg-card hover:bg-card/80 transition-colors">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">Автомобилей</CardTitle>
-                        <Icon name="Car" size={20} className="text-primary" />
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold text-foreground">42</div>
-                      <p className="text-xs text-muted-foreground mt-1">В базе данных</p>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <Card className="border-border bg-card">
-                    <CardHeader>
-                      <CardTitle className="text-lg">Последние заказы</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        {mockOrders.slice(0, 3).map((order) => (
-                          <div key={order.id} className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors">
-                            <div>
-                              <p className="font-medium text-foreground">{order.client}</p>
-                              <p className="text-sm text-muted-foreground">{order.car}</p>
+                {activeTab === 'services' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-fade-in">
+                    {services.map((service) => (
+                      <Card key={service.id} className="border-border bg-card hover:bg-card/80 transition-all hover:scale-105">
+                        <CardHeader>
+                          <div className="flex items-start justify-between">
+                            <CardTitle className="text-base">{service.name}</CardTitle>
+                            {service.popular && (
+                              <Badge className="bg-primary/20 text-primary border-primary/30">Популярная</Badge>
+                            )}
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-3">
+                            <div className="flex items-center text-muted-foreground text-sm">
+                              <Icon name="Clock" size={16} className="mr-2" />
+                              {service.duration}
                             </div>
-                            <div className="text-right">
-                              {getStatusBadge(order.status)}
-                              <p className="text-sm text-muted-foreground mt-1">{order.total.toLocaleString()} ₽</p>
+                            <div className="flex items-center justify-between">
+                              <span className="text-2xl font-bold text-primary">{service.price.toLocaleString()} ₽</span>
+                              <Button size="sm" variant="outline" onClick={() => {
+                                setEditingService(service);
+                                setIsServiceDialogOpen(true);
+                              }}>
+                                <Icon name="Edit" size={16} />
+                              </Button>
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-border bg-card">
-                    <CardHeader>
-                      <CardTitle className="text-lg">Популярные услуги</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        {mockServices.filter(s => s.popular).map((service) => (
-                          <div key={service.id} className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors">
-                            <div>
-                              <p className="font-medium text-foreground">{service.name}</p>
-                              <p className="text-sm text-muted-foreground">{service.duration}</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="font-bold text-primary">{service.price.toLocaleString()} ₽</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'orders' && (
-              <Card className="border-border bg-card animate-fade-in">
-                <CardContent className="p-6">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="hover:bg-transparent border-border">
-                        <TableHead className="text-muted-foreground">№ Заказа</TableHead>
-                        <TableHead className="text-muted-foreground">Клиент</TableHead>
-                        <TableHead className="text-muted-foreground">Автомобиль</TableHead>
-                        <TableHead className="text-muted-foreground">Статус</TableHead>
-                        <TableHead className="text-muted-foreground">Сумма</TableHead>
-                        <TableHead className="text-muted-foreground">Дата</TableHead>
-                        <TableHead className="text-muted-foreground text-right">Действия</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {mockOrders.map((order) => (
-                        <TableRow key={order.id} className="border-border hover:bg-secondary/50 transition-colors">
-                          <TableCell className="font-medium text-foreground">#{order.id}</TableCell>
-                          <TableCell className="text-foreground">{order.client}</TableCell>
-                          <TableCell className="text-muted-foreground">{order.car}</TableCell>
-                          <TableCell>{getStatusBadge(order.status)}</TableCell>
-                          <TableCell className="font-semibold text-foreground">{order.total.toLocaleString()} ₽</TableCell>
-                          <TableCell className="text-muted-foreground">{order.date}</TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="ghost" size="sm">
-                              <Icon name="Eye" size={16} />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            )}
-
-            {activeTab === 'cars' && (
-              <Card className="border-border bg-card animate-fade-in">
-                <CardContent className="p-6">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="hover:bg-transparent border-border">
-                        <TableHead className="text-muted-foreground">Марка</TableHead>
-                        <TableHead className="text-muted-foreground">Модель</TableHead>
-                        <TableHead className="text-muted-foreground">Год</TableHead>
-                        <TableHead className="text-muted-foreground">Владелец</TableHead>
-                        <TableHead className="text-muted-foreground">Заказов</TableHead>
-                        <TableHead className="text-muted-foreground text-right">Действия</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {mockCars.map((car) => (
-                        <TableRow key={car.id} className="border-border hover:bg-secondary/50 transition-colors">
-                          <TableCell className="font-medium text-foreground">{car.brand}</TableCell>
-                          <TableCell className="text-foreground">{car.model}</TableCell>
-                          <TableCell className="text-muted-foreground">{car.year}</TableCell>
-                          <TableCell className="text-muted-foreground">{car.owner}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="border-primary/30 text-primary">{car.orders}</Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="ghost" size="sm">
-                              <Icon name="Eye" size={16} />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            )}
-
-            {activeTab === 'clients' && (
-              <Card className="border-border bg-card animate-fade-in">
-                <CardContent className="p-6">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="hover:bg-transparent border-border">
-                        <TableHead className="text-muted-foreground">ФИО</TableHead>
-                        <TableHead className="text-muted-foreground">Телефон</TableHead>
-                        <TableHead className="text-muted-foreground">Заказов</TableHead>
-                        <TableHead className="text-muted-foreground">Всего потрачено</TableHead>
-                        <TableHead className="text-muted-foreground text-right">Действия</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {mockClients.map((client) => (
-                        <TableRow key={client.id} className="border-border hover:bg-secondary/50 transition-colors">
-                          <TableCell className="font-medium text-foreground">{client.name}</TableCell>
-                          <TableCell className="text-muted-foreground">{client.phone}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="border-primary/30 text-primary">{client.orders}</Badge>
-                          </TableCell>
-                          <TableCell className="font-semibold text-foreground">{client.total.toLocaleString()} ₽</TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="ghost" size="sm">
-                              <Icon name="Eye" size={16} />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            )}
-
-            {activeTab === 'services' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-fade-in">
-                {mockServices.map((service) => (
-                  <Card key={service.id} className="border-border bg-card hover:bg-card/80 transition-all hover:scale-105">
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <CardTitle className="text-base">{service.name}</CardTitle>
-                        {service.popular && (
-                          <Badge className="bg-primary/20 text-primary border-primary/30">Популярная</Badge>
-                        )}
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        <div className="flex items-center text-muted-foreground text-sm">
-                          <Icon name="Clock" size={16} className="mr-2" />
-                          {service.duration}
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-2xl font-bold text-primary">{service.price.toLocaleString()} ₽</span>
-                          <Button size="sm" variant="outline">
-                            <Icon name="Edit" size={16} />
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </main>
       </div>
+
+      <ClientDialog
+        open={isClientDialogOpen}
+        onClose={() => setIsClientDialogOpen(false)}
+        onSave={handleSaveClient}
+        client={editingClient}
+      />
+
+      <CarDialog
+        open={isCarDialogOpen}
+        onClose={() => setIsCarDialogOpen(false)}
+        onSave={handleSaveCar}
+        car={editingCar}
+        clients={clients}
+      />
+
+      <ServiceDialog
+        open={isServiceDialogOpen}
+        onClose={() => setIsServiceDialogOpen(false)}
+        onSave={handleSaveService}
+        service={editingService}
+      />
+
+      <OrderDialog
+        open={isOrderDialogOpen}
+        onClose={() => setIsOrderDialogOpen(false)}
+        onSave={handleSaveOrder}
+        order={editingOrder}
+        clients={clients}
+        cars={cars}
+      />
     </div>
   );
 };

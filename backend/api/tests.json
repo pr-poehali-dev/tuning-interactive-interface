@@ -1,0 +1,20 @@
+{
+  "tests": [
+    {
+      "name": "GET clients",
+      "method": "GET",
+      "path": "/?entity=clients",
+      "expectedStatus": 200,
+      "expectedBody": "array",
+      "bodyMatcher": "type"
+    },
+    {
+      "name": "GET services",
+      "method": "GET",
+      "path": "/?entity=services",
+      "expectedStatus": 200,
+      "expectedBody": "array",
+      "bodyMatcher": "type"
+    }
+  ]
+}
